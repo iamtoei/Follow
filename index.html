@@ -126,6 +126,16 @@
     border-radius:13px;padding:13px 15px;display:flex;justify-content:space-between;align-items:center}
   .owebox span{font-size:13px;color:var(--gold);font-weight:600}
   .owebox b{font-size:23px;color:var(--gold);font-weight:700}
+  .installbox{margin-top:10px;display:flex;gap:8px}
+  .installbox .icard{flex:1;border-radius:13px;padding:11px 13px;text-align:center;border:1.5px solid}
+  .installbox .icard span{display:block;font-size:11.5px;font-weight:600;margin-bottom:2px}
+  .installbox .icard b{font-size:20px;font-weight:700}
+  .installbox .icard.paid{background:#e8f6ec;border-color:#bbdfc7;color:var(--clear)}
+  .installbox .icard.owe{background:#fdecec;border-color:#f5c6c6;color:var(--owe)}
+  .sourceline{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .sourceline button{border:1.5px solid var(--line);background:#fff;border-radius:999px;
+    padding:7px 14px;font:inherit;font-size:14px;cursor:pointer;color:var(--text)}
+  .sourceline button.sel{border-color:#6366f1;background:#eef2ff;color:#4338ca;font-weight:600}
   .teamline{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .teamline button{border:1.5px solid var(--line);background:#fff;border-radius:999px;
     padding:7px 14px;font:inherit;font-size:14px;cursor:pointer;color:var(--text)}
@@ -557,6 +567,21 @@ function openForm(rec){
         '<div class="field"><label>จ่ายแล้ว (เพิ่ม)</label><input id="f_paid" inputmode="numeric" value="'+(rec.paid||'')+'" placeholder="0"></div>'+
       '</div>'+
       '<div class="owebox"><span>ยอดค้าง</span><b id="f_owe">฿0</b></div>'+
+      '<div class="row" style="margin-top:12px">'+
+        '<div class="field"><label>จำนวนงวดทั้งหมด</label><input id="f_installTotal" inputmode="numeric" value="'+(rec.installTotal||'')+'" placeholder="เช่น 24"></div>'+
+        '<div class="field"><label>จ่ายแล้ว (งวด)</label><input id="f_installPaid" inputmode="numeric" value="'+(rec.installPaid||'')+'" placeholder="0"></div>'+
+      '</div>'+
+      '<div class="installbox" id="f_installbox" style="display:none">'+
+        '<div class="icard paid"><span>จ่ายแล้ว</span><b id="f_ip">0</b><span style="font-size:10px">งวด</span></div>'+
+        '<div class="icard owe"><span>ค้างอยู่</span><b id="f_io">0</b><span style="font-size:10px">งวด</span></div>'+
+      '</div>'+
+      '<div class="field" style="margin-top:12px"><label>ช่องทางที่มา</label>'+
+        '<div class="sourceline" id="f_sources">'+
+          ['Facebook','Instagram','Line','แนะนำ'].map(function(s){
+            return '<button type="button" data-src="'+esc(s)+'"'+(rec.source===s?' class="sel"':'')+'>'+esc(s)+'</button>';
+          }).join('')+
+        '</div>'+
+        '<input id="f_source" style="margin-top:8px" value="'+esc(rec.source||'')+'" placeholder="หรือพิมพ์เอง เช่น งานออกบูธ"></div>'+
       '<div class="field"><label>ทีมที่ดูแล (เว้นได้)</label>'+
         '<div class="teamline" id="f_teams">'+teamBtns+'</div>'+
         '<input id="f_team" style="margin-top:8px" value="'+esc(rec.team||'')+'" placeholder="หรือพิมพ์ชื่อทีมเอง"></div>'+
@@ -567,6 +592,17 @@ function openForm(rec){
       '</div>'+
     '</form>';
   ['f_total','f_down','f_paid'].forEach(function(id){$('#'+id).addEventListener('input',calcOwe);});
+  ['f_installTotal','f_installPaid'].forEach(function(id){$('#'+id).addEventListener('input',calcInstall);});
+  // source buttons
+  $('#f_sources').addEventListener('click',function(e){
+    var b=e.target.closest('button[data-src]');if(!b)return;
+    [].forEach.call(this.children,function(x){x.classList.remove('sel')});
+    b.classList.add('sel');$('#f_source').value=b.dataset.src;
+  });
+  $('#f_source').addEventListener('input',function(){
+    [].forEach.call($('#f_sources').children,function(x){x.classList.toggle('sel',x.dataset.src===this.value)},this);
+  });
+  calcInstall();
   $('#f_teams').addEventListener('click',function(e){
     var b=e.target.closest('button[data-team]');if(!b)return;
     [].forEach.call(this.children,function(x){x.classList.remove('sel')});
@@ -586,6 +622,18 @@ function calcOwe(){
   var t=+($('#f_total').value||0),d=+($('#f_down').value||0),p=+($('#f_paid').value||0);
   $('#f_owe').textContent=baht(Math.max(0,t-d-p));
 }
+function calcInstall(){
+  var tot=+($('#f_installTotal').value||0),paid=+($('#f_installPaid').value||0);
+  var box=$('#f_installbox');
+  if(!box) return;
+  if(tot>0){
+    box.style.display='flex';
+    $('#f_ip').textContent=paid;
+    $('#f_io').textContent=Math.max(0,tot-paid);
+  } else {
+    box.style.display='none';
+  }
+}
 
 async function onSave(rec){
   var t=+($('#f_total').value||0),d=+($('#f_down').value||0),p=+($('#f_paid').value||0);
@@ -594,6 +642,10 @@ async function onSave(rec){
     name:$('#f_name').value.trim()||'(ไม่ระบุชื่อ)',
     phone:$('#f_phone').value.trim(),model:$('#f_model').value.trim(),
     total:t,down:d,paid:p,outstanding:Math.max(0,t-d-p),
+    installTotal:+($('#f_installTotal').value||0)||null,
+    installPaid:+($('#f_installPaid').value||0)||null,
+    installOwed:(+($('#f_installTotal').value||0)&&+($('#f_installTotal').value||0)-+($('#f_installPaid').value||0))||null,
+    source:$('#f_source').value.trim(),
     team:$('#f_team').value.trim(),area:$('#f_area').value.trim(),
     lat:rec.lat,lng:rec.lng,ts:editingId?(rec.ts||Date.now()):Date.now()
   };
@@ -638,6 +690,14 @@ function openView(id){
       '<div class="vline"><span>ดาวน์</span><b class="num">'+baht(c.down)+'</b></div>'+
       '<div class="vline"><span>จ่ายเพิ่ม</span><b class="num">'+baht(c.paid)+'</b></div>'+
       '<div class="vline"><span>ยอดค้าง</span><b class="num" style="color:'+(c.outstanding>0?'var(--owe)':'var(--clear)')+'">'+baht(c.outstanding)+'</b></div>'+
+      (c.installTotal?
+        '<div class="vline"><span>งวด</span>'+
+          '<span style="display:flex;gap:12px">'+
+            '<span style="color:var(--clear);font-weight:700">✓ '+(c.installPaid||0)+' งวด</span>'+
+            (c.installOwed>0?'<span style="color:var(--owe);font-weight:700">ค้าง '+c.installOwed+' งวด</span>':'<span style="color:var(--clear);font-weight:700">ครบแล้ว</span>')+
+          '</span>'+
+        '</div>':'')+
+      (c.source?'<div class="vline"><span>ช่องทาง</span><b>'+esc(c.source)+'</b></div>':'')+
     '</div>'+
     '<div class="actions" style="padding-left:22px;padding-right:22px">'+
       '<button class="btn ghost" id="vClose">ปิด</button>'+
