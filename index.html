@@ -158,6 +158,12 @@
   .cust .nm{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cust .meta{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cust .amt{text-align:right;font-size:14px;font-weight:700}
+  .provhead{display:flex;align-items:center;gap:8px;padding:11px 18px 7px;cursor:pointer;
+    background:#f5f8f9;border-top:1px solid var(--line);position:sticky;top:0;z-index:1}
+  .provhead:active{background:#e7f4f0}
+  .provhead .pn{font-weight:700;font-size:13.5px;color:var(--text);flex:1;display:flex;align-items:center;gap:6px}
+  .provhead .pc{font-size:12px;color:var(--muted)}
+  .provhead .pa{font-size:13px;font-weight:700}
   .empty{text-align:center;color:var(--muted);padding:50px 24px;font-size:14.5px;line-height:1.7}
 
   /* ---------- ตั้งค่า Google Sheet ---------- */
@@ -532,24 +538,57 @@ function renderFilters(){
   var teams=['ทั้งหมด'].concat(Array.from(new Set(customers.map(function(c){return c.team}).filter(Boolean))));
   $('#lpfilter').innerHTML=teams.map(function(t){return '<button data-f="'+esc(t)+'"'+(t===filterTeam?' class="sel"':'')+'>'+esc(t)+'</button>'}).join('');
 }
+function provinceOf(c){
+  var a=(c.area||'').trim();
+  if(!a) return 'ไม่ระบุจังหวัด';
+  var parts=a.split('·').map(function(s){return s.trim()}).filter(Boolean);
+  return parts.length ? parts[parts.length-1] : 'ไม่ระบุจังหวัด';
+}
 function renderList(){
   renderFilters();
-  var arr=customers.slice().sort(function(a,b){return b.ts-a.ts});
+  var arr=customers.slice();
   if(filterTeam!=='ทั้งหมด') arr=arr.filter(function(c){return c.team===filterTeam});
   var box=$('#lplist');
   if(!arr.length){ box.innerHTML='<div class="empty">ยังไม่มีลูกค้าในรายการนี้<br>กดปุ่ม 📍 เพื่อปักหมุดลูกค้าใหม่</div>'; return; }
-  box.innerHTML=arr.map(function(c){
-    return '<div class="cust" data-id="'+c.id+'">'+
-      '<div class="av" style="background:'+colorOf(c)+'">'+esc((c.name||'?').charAt(0))+'</div>'+
-      '<div class="info"><div class="nm">'+esc(c.name)+'</div>'+
-        '<div class="meta">'+[c.model,c.phone,c.area].filter(Boolean).map(esc).join(' · ')+'</div></div>'+
-      '<div class="amt" style="color:'+(c.outstanding>0?'var(--owe)':'var(--clear)')+'">'+baht(c.outstanding)+'</div>'+
-    '</div>';
-  }).join('');
+  var groups={};
+  arr.forEach(function(c){ var p=provinceOf(c); (groups[p]=groups[p]||[]).push(c); });
+  var provs=Object.keys(groups).sort(function(a,b){
+    if(a==='ไม่ระบุจังหวัด') return 1; if(b==='ไม่ระบุจังหวัด') return -1;
+    return groups[b].length-groups[a].length || a.localeCompare(b,'th');
+  });
+  var html='';
+  provs.forEach(function(p){
+    var list=groups[p].sort(function(a,b){return b.ts-a.ts});
+    var owe=list.reduce(function(s,c){return s+(Number(c.outstanding)||0)},0);
+    html+='<div class="provhead" data-prov="'+esc(p)+'">'+
+            '<span class="pn">📍 '+esc(p)+'</span>'+
+            '<span class="pc">'+list.length+' ราย</span>'+
+            '<span class="pa" style="color:'+(owe>0?'var(--owe)':'var(--clear)')+'">'+baht(owe)+'</span>'+
+          '</div>';
+    html+=list.map(function(c){
+      return '<div class="cust" data-id="'+c.id+'">'+
+        '<div class="av" style="background:'+colorOf(c)+'">'+esc((c.name||'?').charAt(0))+'</div>'+
+        '<div class="info"><div class="nm">'+esc(c.name)+'</div>'+
+          '<div class="meta">'+[c.model,c.phone].filter(Boolean).map(esc).join(' · ')+'</div></div>'+
+        '<div class="amt" style="color:'+(c.outstanding>0?'var(--owe)':'var(--clear)')+'">'+baht(c.outstanding)+'</div>'+
+      '</div>';
+    }).join('');
+  });
+  box.innerHTML=html;
   [].forEach.call(box.querySelectorAll('.cust'),function(el){
     el.onclick=function(){ var c=customers.find(function(x){return x.id===el.dataset.id});
       if(c){ closeList(); map.flyTo([c.lat,c.lng],14,{duration:.7}); setTimeout(function(){openView(c.id)},650); } };
   });
+  [].forEach.call(box.querySelectorAll('.provhead'),function(el){
+    el.onclick=function(){ zoomProvince(el.dataset.prov); };
+  });
+}
+function zoomProvince(p){
+  var pts=customers.filter(function(c){return provinceOf(c)===p && c.lat!=null;});
+  if(!pts.length) return;
+  closeList();
+  if(pts.length===1){ map.flyTo([pts[0].lat,pts[0].lng],13,{duration:.7}); return; }
+  try{ map.fitBounds(L.latLngBounds(pts.map(function(c){return [c.lat,c.lng]})).pad(.3),{maxZoom:13}); }catch(e){}
 }
 $('#lpfilter').addEventListener?0:0;
 
