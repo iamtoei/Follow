@@ -145,6 +145,13 @@
   .lphead h2{margin:0;font-size:18px;font-weight:700}
   .lphead .x{border:0;background:#eef2f5;width:34px;height:34px;border-radius:50%;
     cursor:pointer;font-size:17px}
+  .teambtn{border:1.5px solid var(--line);background:#fff;border-radius:999px;
+    padding:7px 13px;font:inherit;font-size:13px;cursor:pointer;color:var(--accent-press);font-weight:600}
+  .teamrow{display:flex;align-items:center;justify-content:space-between;padding:11px 0;
+    border-top:1px solid var(--line);font-size:15px}
+  .teamrow:first-child{border-top:0}
+  .teamrow .trm{border:0;background:#fdeaea;color:var(--owe);width:30px;height:30px;
+    border-radius:8px;cursor:pointer;font-size:14px}
   .lpfilter{display:flex;gap:7px;overflow:auto;padding:11px 18px;border-bottom:1px solid var(--line)}
   .lpfilter button{border:1.5px solid var(--line);background:#fff;border-radius:999px;
     padding:6px 13px;font:inherit;font-size:13.5px;cursor:pointer;white-space:nowrap;color:var(--text)}
@@ -237,7 +244,12 @@
 
 <!-- พาเนลรายชื่อ -->
 <div class="listpanel" id="listpanel">
-  <div class="lphead"><h2>รายชื่อลูกค้า</h2><button class="x" id="lpClose">✕</button></div>
+  <div class="lphead"><h2>รายชื่อลูกค้า</h2>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="teambtn" id="teamsBtn">จัดการทีม</button>
+      <button class="x" id="lpClose">✕</button>
+    </div>
+  </div>
   <div class="lpfilter" id="lpfilter"></div>
   <div class="lplist" id="lplist"></div>
 </div>
@@ -253,10 +265,16 @@
 /* ============ สถานะ ============ */
 var STORE_KEY='customers', CFG_KEY='cfg';
 var customers=[];           // {id,name,phone,model,total,down,paid,outstanding,team,area,lat,lng,ts}
-var cfg={sheetUrl:''};
+var cfg={sheetUrl:'',teams:['ทีม A','ทีม B','ทีม C']};
 var markers={};             // id -> leaflet marker
 var map, addMode=false, tempMarker=null, editingId=null, filterTeam='ทั้งหมด';
-var TEAMS=['ทีม A','ทีม B','ทีม C'];   // ปรับได้ในฟอร์ม
+var TEAMS=['ทีม A','ทีม B','ทีม C'];   // รายการเริ่มต้น (ปรับเพิ่มได้ในเมนูจัดการทีม)
+function allTeams(){
+  var set={};
+  (cfg.teams||[]).forEach(function(t){ if(t) set[t]=1; });
+  customers.forEach(function(c){ if(c.team) set[c.team]=1; });
+  return Object.keys(set).sort(function(a,b){return a.localeCompare(b,'th');});
+}
 
 var $=function(s){return document.querySelector(s)};
 var baht=function(n){n=Number(n)||0;return '฿'+n.toLocaleString('th-TH')};
@@ -425,7 +443,7 @@ function reverseGeo(latlng,cb){
 
 function openForm(rec){
   rec=rec||{};
-  var teams=TEAMS.slice(); if(rec.team && teams.indexOf(rec.team)<0) teams.unshift(rec.team);
+  var teams=allTeams(); if(rec.team && teams.indexOf(rec.team)<0) teams.unshift(rec.team);
   var teamBtns=teams.map(function(t){return '<button type="button" data-team="'+esc(t)+'"'+(rec.team===t?' class="sel"':'')+'>'+esc(t)+'</button>'}).join('');
   $('#sheet').innerHTML=
    '<div class="grab"></div>'+
@@ -484,6 +502,7 @@ async function onSave(rec){
     lat:rec.lat, lng:rec.lng, ts: editingId? (rec.ts||Date.now()) : Date.now()
   };
   if(tempMarker){ map.removeLayer(tempMarker); tempMarker=null; }
+  if(c.team){ cfg.teams=cfg.teams||[]; if(cfg.teams.indexOf(c.team)<0){ cfg.teams.push(c.team); saveCfg(); } }
   if(editingId){
     var i=customers.findIndex(function(x){return x.id===editingId});
     if(i>-1){ c.lat=customers[i].lat;c.lng=customers[i].lng; customers[i]=c; }
@@ -687,6 +706,34 @@ function closeSheet(){
 function openList(){ renderList(); $('#listpanel').classList.add('on'); }
 function closeList(){ $('#listpanel').classList.remove('on'); }
 
+function openTeams(){
+  var rows=(cfg.teams||[]).map(function(t,i){
+    return '<div class="teamrow"><span>'+esc(t)+'</span><button class="trm" data-i="'+i+'" aria-label="ลบ">✕</button></div>';
+  }).join('') || '<div style="color:var(--muted);font-size:14px;padding:10px 0">ยังไม่มีทีม เพิ่มด้านล่างได้เลย</div>';
+  $('#sheet').innerHTML=
+    '<div class="grab"></div>'+
+    '<h2>จัดการทีม</h2>'+
+    '<p class="sub">เพิ่ม/ลบได้ไม่จำกัด ทีมที่เพิ่มจะขึ้นเป็นปุ่มในฟอร์มลูกค้า และใช้ร่วมกันทุกเครื่อง</p>'+
+    '<div style="padding:8px 22px 0">'+
+      '<div id="teamlist">'+rows+'</div>'+
+      '<div class="syncrow"><input id="t_new" placeholder="ชื่อทีมใหม่ เช่น ทีมเชียงราย">'+
+        '<button type="button" class="btn primary" id="t_add" style="flex:0 0 auto;padding:0 20px">เพิ่ม</button></div>'+
+    '</div>'+
+    '<div class="actions"><button type="button" class="btn primary" id="t_done">เสร็จ</button></div>';
+  function addTeam(){
+    var v=$('#t_new').value.trim(); if(!v) return;
+    cfg.teams=cfg.teams||[]; if(cfg.teams.indexOf(v)<0) cfg.teams.push(v);
+    saveCfg(); openTeams();
+  }
+  $('#t_add').onclick=addTeam;
+  $('#t_new').addEventListener('keydown',function(e){ if(e.key==='Enter'){e.preventDefault();addTeam();} });
+  [].forEach.call($('#teamlist').querySelectorAll('.trm'),function(b){
+    b.onclick=function(){ cfg.teams.splice(+b.dataset.i,1); saveCfg(); openTeams(); };
+  });
+  $('#t_done').onclick=function(){ closeSheet(); renderList(); };
+  openSheet();
+}
+
 var toastTimer=null;
 function toast(msg,err){
   var t=$('#toast'); t.textContent=msg; t.classList.toggle('err',!!err); t.classList.add('on');
@@ -701,6 +748,7 @@ function bind(){
   $('#addBtn').onclick=function(){ closeList(); toggleAdd(); };
   $('#listBtn').onclick=openList;
   $('#lpClose').onclick=closeList;
+  $('#teamsBtn').onclick=openTeams;
   $('#syncBtn').onclick=openSync;
   $('#scrim').onclick=closeSheet;
   $('#lpfilter').addEventListener('click',function(e){
