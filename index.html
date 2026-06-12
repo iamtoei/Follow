@@ -138,6 +138,7 @@
   .btn.primary:active{background:var(--accent-press)}
   .btn.ghost{flex:0 0 auto;background:#eef2f5;color:var(--text);padding-left:22px;padding-right:22px}
   .btn.danger{background:#fdeaea;color:var(--owe)}
+  .btn.nav{background:#e8f0fe;color:#1a56db;flex:0 0 auto;padding-left:18px;padding-right:18px}
 
   /* ---------- การ์ดดูข้อมูลลูกค้า ---------- */
   .view .vline{display:flex;justify-content:space-between;padding:11px 0;
@@ -640,9 +641,17 @@ function openView(id){
     '</div>'+
     '<div class="actions" style="padding-left:22px;padding-right:22px">'+
       '<button class="btn ghost" id="vClose">ปิด</button>'+
+      '<button class="btn nav" id="vNav">🧭 นำทาง</button>'+
       '<button class="btn primary" id="vEdit">แก้ไข</button>'+
     '</div>';
   $('#vClose').onclick=closeSheet;
+  $('#vNav').onclick=function(){
+    // iOS → maps:// เปิด Apple Maps, ทุกแพลตฟอร์ม → Google Maps
+    var googleUrl='https://www.google.com/maps/dir/?api=1&destination='+c.lat+','+c.lng;
+    var appleUrl='maps://maps.apple.com/?daddr='+c.lat+','+c.lng;
+    var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+    window.open(isIOS?appleUrl:googleUrl,'_blank');
+  };
   $('#vEdit').onclick=function(){editingId=c.id;openForm(c);};
   openSheet();
   map.panTo([c.lat,c.lng]);
