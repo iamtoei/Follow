@@ -493,6 +493,7 @@ async function onDelete(id){
   customers=customers.filter(function(x){return x.id!==id});
   if(markers[id]){ map.removeLayer(markers[id]); delete markers[id]; }
   await saveStore(); closeSheet(); renderStats(); renderList();
+  pushDelete(id);
   toast('ลบแล้ว');
 }
 
@@ -614,6 +615,28 @@ function pushToSheet(c){
     .then(function(){ toast('✓ บันทึก + ส่งเข้า Sheet แล้ว'); })
     .catch(function(){ toast('บันทึกในเครื่องแล้ว · ส่ง Sheet ไม่สำเร็จ',true); });
 }
+function pushDelete(id){
+  if(!cfg.sheetUrl) return;
+  fetch(cfg.sheetUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({id:id,_delete:true})}).catch(function(){});
+}
+function fetchFromSheet(){
+  if(!cfg.sheetUrl) return;
+  var name='__listcb'+Date.now()+Math.floor(Math.random()*999);
+  var s=document.createElement('script');
+  var to=setTimeout(function(){ cleanup(); },15000);
+  function cleanup(){ try{delete window[name]}catch(e){window[name]=undefined} if(s.parentNode)s.parentNode.removeChild(s); clearTimeout(to); }
+  window[name]=function(d){
+    cleanup();
+    if(d && d.ok && d.items){
+      customers=d.items.map(function(r){ r.ts=r.ts||Date.now(); return r; });
+      saveStore(); renderAllMarkers(); renderStats(); renderList();
+      if(customers.length){ try{ map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(.25),{maxZoom:12}); }catch(e){} }
+    }
+  };
+  s.onerror=function(){ cleanup(); };
+  s.src=cfg.sheetUrl+(cfg.sheetUrl.indexOf('?')>-1?'&':'?')+'list=1&callback='+name;
+  document.body.appendChild(s);
+}
 
 /* ============ sheet ควบคุม ============ */
 function openSheet(){ $('#scrim').classList.add('on'); $('#sheet').classList.add('on'); }
@@ -657,6 +680,7 @@ function bind(){
     var g=L.featureGroup(Object.values(markers));
     try{ map.fitBounds(g.getBounds().pad(.25),{maxZoom:12}); }catch(e){}
   }
+  fetchFromSheet();        // ดึงข้อมูลล่าสุดจาก Sheet ให้ทุกเครื่องเห็นตรงกัน
   setTimeout(function(){ $('#loader').classList.add('gone'); },300);
 })();
 })();
