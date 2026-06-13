@@ -325,6 +325,8 @@ function allTeams(){
 var $=function(s){return document.querySelector(s)};
 var baht=function(n){n=Number(n)||0;return '฿'+n.toLocaleString('th-TH')};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
+// แปลงตัวเลขจาก input — ตัด , และ space ออกก่อน
+var parseNum=function(v){return +(String(v||'').replace(/[,\s]/g,''))||0;};;
 
 /* ============ storage ============ */
 var hasWS=(typeof window!=='undefined'&&window.storage&&typeof window.storage.get==='function');
@@ -355,10 +357,15 @@ function initMap(){
   map.on('click',function(e){if(addMode) onDrop(e.latlng);});
 }
 
+function calcOutstanding(c){
+  // คำนวณใหม่เสมอ ป้องกันข้อมูลเก่าที่บันทึกผิด
+  var t=parseNum(c.total),d=parseNum(c.down),p=parseNum(c.paid);
+  return Math.max(0,t-d-p);
+}
 function statusOf(c){
-  var t=Number(c.total)||0,owe=Number(c.outstanding);
-  if(!t&&!c.down&&!c.paid) return 'unknown';
-  return owe>0?'owe':'clear';
+  var t=parseNum(c.total);
+  if(!t&&!parseNum(c.down)&&!parseNum(c.paid)) return 'unknown';
+  return calcOutstanding(c)>0?'owe':'clear';
 }
 function colorOf(c){return{owe:'#dc2626',clear:'#16a34a',unknown:'#94a3b8'}[statusOf(c)];}
 
@@ -461,7 +468,7 @@ function renderSuggest(geoList,custList){
       '<span>'+esc(c.name)+
         '<span class="t2">'+(c.model?esc(c.model)+' · ':'')+esc(c.area||'ไม่ระบุพื้นที่')+'</span>'+
       '</span>'+
-      '<span class="samount" style="color:'+(Number(c.outstanding)>0?'var(--owe)':'var(--clear)')+'">'+baht(c.outstanding)+'</span>';
+      '<span class="samount" style="color:'+(Number(c.outstanding)>0?'var(--owe)':'var(--clear)')+'">'+baht(calcOutstanding(c))+'</span>';
     b.onclick=function(){
       box.classList.remove('open');
       $('#search').value=c.name;
@@ -638,11 +645,11 @@ function openForm(rec){
 }
 
 function calcOwe(){
-  var t=+($('#f_total').value||0),d=+($('#f_down').value||0),p=+($('#f_paid').value||0);
+  var t=parseNum($('#f_total').value),d=parseNum($('#f_down').value),p=parseNum($('#f_paid').value);
   $('#f_owe').textContent=baht(Math.max(0,t-d-p));
 }
 function calcInstall(){
-  var tot=+($('#f_installTotal').value||0),paid=+($('#f_installPaid').value||0);
+  var tot=parseNum($('#f_installTotal').value),paid=parseNum($('#f_installPaid').value);
   var box=$('#f_installbox');
   if(!box) return;
   if(tot>0){
@@ -655,7 +662,7 @@ function calcInstall(){
 }
 
 async function onSave(rec){
-  var t=+($('#f_total').value||0),d=+($('#f_down').value||0),p=+($('#f_paid').value||0);
+  var t=parseNum($('#f_total').value),d=parseNum($('#f_down').value),p=parseNum($('#f_paid').value);
   var c={
     id:editingId||('c'+Date.now()+Math.floor(Math.random()*900)),
     name:$('#f_name').value.trim()||'(ไม่ระบุชื่อ)',
@@ -663,7 +670,7 @@ async function onSave(rec){
     total:t,down:d,paid:p,outstanding:Math.max(0,t-d-p),
     installTotal:+($('#f_installTotal').value||0)||null,
     installPaid:+($('#f_installPaid').value||0)||null,
-    installOwed:(+($('#f_installTotal').value||0)&&+($('#f_installTotal').value||0)-+($('#f_installPaid').value||0))||null,
+    installOwed:(parseNum($('#f_installTotal').value)>0?Math.max(0,parseNum($('#f_installTotal').value)-parseNum($('#f_installPaid').value)):null),
     facebook:$('#f_fb').value.trim(),
     instagram:$('#f_ig').value.trim(),
     team:$('#f_team').value.trim(),area:$('#f_area').value.trim(),
@@ -709,7 +716,7 @@ function openView(id){
       '<div class="vline"><span>ราคาเต็ม</span><b class="num">'+baht(c.total)+'</b></div>'+
       '<div class="vline"><span>ดาวน์</span><b class="num">'+baht(c.down)+'</b></div>'+
       '<div class="vline"><span>จ่ายเพิ่ม</span><b class="num">'+baht(c.paid)+'</b></div>'+
-      '<div class="vline"><span>ยอดค้าง</span><b class="num" style="color:'+(c.outstanding>0?'var(--owe)':'var(--clear)')+'">'+baht(c.outstanding)+'</b></div>'+
+      '<div class="vline"><span>ยอดค้าง</span><b class="num" style="color:'+(calcOutstanding(c)>0?'var(--owe)':'var(--clear)')+'">'+baht(calcOutstanding(c))+'</b></div>'+
       (c.installTotal?
         '<div class="vline"><span>งวด</span>'+
           '<span style="display:flex;gap:12px">'+
@@ -768,7 +775,7 @@ function renderList(){
   var html='';
   provs.forEach(function(p){
     var list=groups[p].sort(function(a,b){return b.ts-a.ts;});
-    var owe=list.reduce(function(s,c){return s+(Number(c.outstanding)||0);},0);
+    var owe=list.reduce(function(s,c){return s+(calcOutstanding(c));},0);
     html+='<div class="provhead" data-prov="'+esc(p)+'">'+
             '<span class="pn">📍 '+esc(p)+'</span>'+
             '<span class="pc">'+list.length+' ราย</span>'+
@@ -779,7 +786,7 @@ function renderList(){
         '<div class="av" style="background:'+colorOf(c)+'">'+esc((c.name||'?').charAt(0))+'</div>'+
         '<div class="info"><div class="nm">'+esc(c.name)+'</div>'+
           '<div class="meta">'+[c.model,c.phone].filter(Boolean).map(esc).join(' · ')+'</div></div>'+
-        '<div class="amt" style="color:'+(c.outstanding>0?'var(--owe)':'var(--clear)')+'">'+baht(c.outstanding)+'</div>'+
+        '<div class="amt" style="color:'+(calcOutstanding(c)>0?'var(--owe)':'var(--clear)')+'">'+baht(calcOutstanding(c))+'</div>'+
       '</div>';
     }).join('');
   });
@@ -805,8 +812,8 @@ function zoomProvince(p){
 
 function renderStats(){
   var n=customers.length;
-  var owe=customers.reduce(function(s,c){return s+(Number(c.outstanding)||0);},0);
-  var oweN=customers.filter(function(c){return c.outstanding>0;}).length;
+  var owe=customers.reduce(function(s,c){return s+(calcOutstanding(c));},0);
+  var oweN=customers.filter(function(c){return calcOutstanding(c)>0;}).length;
   $('#stats').innerHTML=
     '<div class="chip">ลูกค้า <b class="num">'+n+'</b></div>'+
     '<div class="chip"><span class="dot" style="background:var(--owe)"></span>ค้างชำระ <b class="num">'+oweN+'</b></div>'+
