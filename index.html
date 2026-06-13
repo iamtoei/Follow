@@ -98,6 +98,8 @@
   .fab.add.on{background:var(--owe);transform:rotate(45deg)}
   .fab.mini{width:46px;height:46px;font-size:18px;background:var(--panel)}
   .fab.list{background:var(--panel)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .fab.syncing{animation:spin .8s linear infinite}
 
   /* ---------- โหมดปักหมุด ฮินต์ ---------- */
   .hint{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
@@ -271,6 +273,7 @@
 <!-- ปุ่มลอย -->
 <div class="fabs">
   <button class="fab mini" id="syncBtn" title="ตั้งค่า Google Sheet">⚙️</button>
+  <button class="fab mini" id="refreshBtn" title="ซิงค์ข้อมูลล่าสุด">🔄</button>
   <button class="fab list" id="listBtn" title="รายชื่อลูกค้า">☰</button>
   <button class="fab add" id="addBtn" title="เพิ่มลูกค้า">📍</button>
 </div>
@@ -399,7 +402,7 @@ function searchCustomers(q){
   if(!q) return [];
   return customers.filter(function(c){
     return (c.name||'').toLowerCase().indexOf(q)>-1
-        || (c.phone||'').indexOf(q)>-1
+        || String(c.phone||'').indexOf(q)>-1
         || (c.model||'').toLowerCase().indexOf(q)>-1
         || (c.area||'').toLowerCase().indexOf(q)>-1;
   }).slice(0,5);
@@ -921,8 +924,12 @@ function pushDelete(id){
 }
 
 /* ✅ แก้แล้ว: ใช้ fetch แทน JSONP — ทำงานได้บน iOS Safari / iPad */
-function fetchFromSheet(){
-  if(!cfg.sheetUrl) return;
+function fetchFromSheet(opts){
+  opts=opts||{};
+  if(!cfg.sheetUrl){
+    if(opts.manual) toast('ยังไม่ได้ตั้งค่า Google Sheet ⚙️',true);
+    return;
+  }
   var url=cfg.sheetUrl+(cfg.sheetUrl.indexOf('?')>-1?'&':'?')+'list=1';
   fetch(url)
     .then(function(r){return r.json();})
@@ -930,12 +937,18 @@ function fetchFromSheet(){
       if(d&&d.ok&&d.items){
         customers=d.items.map(function(r){r.ts=r.ts||Date.now();return r;});
         saveStore();renderAllMarkers();renderStats();renderList();
-        if(customers.length){
+        if(opts.manual) toast('✓ ซิงค์แล้ว '+customers.length+' ราย');
+        if(customers.length&&!opts.manual){
           try{map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(.25),{maxZoom:12});}catch(e){}
         }
-      }
+      } else if(opts.manual) toast('ไม่มีข้อมูลใน Sheet',true);
+      if(opts.done) opts.done();
     })
-    .catch(function(err){console.warn('fetchFromSheet error',err);});
+    .catch(function(err){
+      console.warn('fetchFromSheet error',err);
+      if(opts.manual) toast('ซิงค์ไม่สำเร็จ ลองใหม่',true);
+      if(opts.done) opts.done();
+    });
 }
 
 /* ============ sheet / panel helpers ============ */
@@ -1087,6 +1100,11 @@ function bind(){
   $('#lpClose').onclick=closeList;
   $('#teamsBtn').onclick=openTeams;
   $('#syncBtn').onclick=openSync;
+  $('#refreshBtn').onclick=function(){
+    var btn=$('#refreshBtn');
+    btn.classList.add('syncing');
+    fetchFromSheet({manual:true,done:function(){btn.classList.remove('syncing');}});
+  };
   $('#scrim').onclick=closeSheet;
   $('#lpfilter').addEventListener('click',function(e){
     var b=e.target.closest('button[data-f]');if(!b)return;filterTeam=b.dataset.f;renderList();
