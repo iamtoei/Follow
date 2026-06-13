@@ -1,7 +1,13 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>ระบบติดตามลูกค้า</title>
+<title>ติดตามลูกค้า</title>
+<meta name="description" content="ระบบติดตามลูกค้าบนแผนที่">
+<meta name="theme-color" content="#0e7c66">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ติดตามลูกค้า">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -227,6 +233,19 @@
   .loader{position:fixed;inset:0;z-index:2000;background:var(--ink);color:#cfe;
     display:grid;place-items:center;font-size:15px;transition:.3s}
   .loader.gone{opacity:0;pointer-events:none}
+  /* ---------- แบนเนอร์ติดตั้ง PWA ---------- */
+  .install-bar{position:fixed;bottom:0;left:0;right:0;z-index:700;
+    background:var(--ink);color:#fff;padding:14px 18px calc(14px + env(safe-area-inset-bottom));
+    display:flex;gap:12px;align-items:center;box-shadow:0 -4px 20px rgba(0,0,0,.3);
+    transform:translateY(100%);transition:.3s cubic-bezier(.2,.8,.2,1)}
+  .install-bar.on{transform:translateY(0)}
+  .install-bar .iico{font-size:28px;flex:0 0 auto}
+  .install-bar .itxt{flex:1;font-size:14px;line-height:1.4}
+  .install-bar .itxt b{display:block;font-size:15px;margin-bottom:2px}
+  .install-bar .ibtn{flex:0 0 auto;border:0;background:var(--accent);color:#fff;
+    border-radius:10px;padding:10px 16px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+  .install-bar .iclose{flex:0 0 auto;border:0;background:none;color:#aaa;
+    font-size:20px;cursor:pointer;padding:4px}
   @media(max-width:520px){
     .stats{top:66px}
     .sheet{width:100%}
@@ -273,6 +292,12 @@
   <div class="lplist" id="lplist"></div>
 </div>
 
+<div class="install-bar" id="installBar">
+  <span class="iico">📲</span>
+  <span class="itxt"><b>ติดตั้งเป็นแอป</b>ใช้งานได้เหมือนแอปจริง ไม่ต้องเปิดเบราว์เซอร์</span>
+  <button class="ibtn" id="installBtn">ติดตั้ง</button>
+  <button class="iclose" id="installClose" aria-label="ปิด">✕</button>
+</div>
 <div class="toast" id="toast"></div>
 <div class="loader" id="loader">กำลังเปิดแผนที่…</div>
 
@@ -864,7 +889,15 @@ function openSync(){
       '</ol>'+
       '<div class="syncrow"><input id="f_url" placeholder="https://script.google.com/macros/s/…/exec" value="'+esc(cfg.sheetUrl||'')+'"></div>'+
     '</div>'+
-    '<div class="actions"><button type="button" class="btn ghost" id="syncClose">ปิด</button>'+
+    '<div style="margin-top:16px;padding:14px;background:#f0faf5;border:1.5px solid #b7dece;border-radius:13px">'+
+    '<div style="font-weight:700;font-size:14px;margin-bottom:6px">📲 ติดตั้งเป็นแอปบนมือถือ</div>'+
+    '<div style="font-size:13px;color:var(--muted);line-height:1.7">'+
+      '<b style="color:var(--text)">iPhone / iPad:</b> เปิดไฟล์ใน Safari → กด <b>แชร์ ☐↑</b> → <b>"เพิ่มไปยังหน้าจอโฮม"</b><br>'+
+      '<b style="color:var(--text)">Android:</b> เปิดใน Chrome → กด <b>⋮</b> → <b>"เพิ่มไปยังหน้าจอหลัก"</b><br><br>'+
+      '⚠️ ข้อมูลจะซิงค์ข้ามเครื่องได้ก็ต่อเมื่อตั้งค่า <b>Google Sheet</b> ด้านบนแล้วเท่านั้น'+
+    '</div>'+
+  '</div>'+
+  '<div class="actions"><button type="button" class="btn ghost" id="syncClose">ปิด</button>'+
       '<button type="button" class="btn primary" id="syncSave">บันทึกการเชื่อมต่อ</button></div></form>';
   $('#copyCode').onclick=function(){navigator.clipboard.writeText(APPS_SCRIPT).then(function(){toast('คัดลอกโค้ดแล้ว');});};
   $('#syncClose').onclick=closeSheet;
@@ -943,6 +976,101 @@ function openTeams(){
   openSheet();
 }
 
+/* ============ PWA — ไอคอน + Manifest + Install Prompt ============ */
+var deferredInstallPrompt=null;
+
+function makePWAIcon(size){
+  var c=document.createElement('canvas'); c.width=size; c.height=size;
+  var x=c.getContext('2d'), s=size/192;
+  // พื้นหลังกลม
+  x.fillStyle='#0e7c66';
+  x.beginPath();
+  var r=38*s;
+  x.moveTo(r,0); x.lineTo(size-r,0); x.quadraticCurveTo(size,0,size,r);
+  x.lineTo(size,size-r); x.quadraticCurveTo(size,size,size-r,size);
+  x.lineTo(r,size); x.quadraticCurveTo(0,size,0,size-r);
+  x.lineTo(0,r); x.quadraticCurveTo(0,0,r,0); x.closePath(); x.fill();
+  // หมุด — วงกลมบน
+  x.fillStyle='rgba(255,255,255,.95)';
+  x.beginPath(); x.arc(size*.5,size*.41,size*.22,0,Math.PI*2); x.fill();
+  // หมุด — หางสามเหลี่ยม
+  x.beginPath();
+  x.moveTo(size*.32,size*.54); x.lineTo(size*.68,size*.54); x.lineTo(size*.5,size*.8);
+  x.closePath(); x.fill();
+  // วงกลมใน
+  x.fillStyle='#0e7c66';
+  x.beginPath(); x.arc(size*.5,size*.41,size*.11,0,Math.PI*2); x.fill();
+  return c.toDataURL('image/png');
+}
+
+function setupPWA(){
+  var icon192=makePWAIcon(192);
+  var icon512=makePWAIcon(512);
+
+  // apple-touch-icon
+  var lnk=document.createElement('link');
+  lnk.rel='apple-touch-icon'; lnk.href=icon192;
+  document.head.appendChild(lnk);
+
+  // Web App Manifest
+  var manifest={
+    name:'ระบบติดตามลูกค้า', short_name:'ติดตามลูกค้า',
+    description:'ติดตามลูกค้าและยอดค้างบนแผนที่',
+    display:'standalone', orientation:'portrait',
+    background_color:'#0d1b2a', theme_color:'#0e7c66',
+    start_url:location.href,
+    icons:[
+      {src:icon192,sizes:'192x192',type:'image/png',purpose:'any maskable'},
+      {src:icon512,sizes:'512x512',type:'image/png',purpose:'any maskable'}
+    ]
+  };
+  var blob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
+  var ml=document.createElement('link');
+  ml.rel='manifest'; ml.href=URL.createObjectURL(blob);
+  document.head.appendChild(ml);
+
+  // Android install prompt
+  window.addEventListener('beforeinstallprompt',function(e){
+    e.preventDefault(); deferredInstallPrompt=e;
+    // ไม่ใช่ standalone (ยังไม่ได้ติดตั้ง) → แสดงแบนเนอร์
+    if(!window.matchMedia('(display-mode: standalone)').matches){
+      setTimeout(function(){$('#installBar').classList.add('on');},2000);
+    }
+  });
+
+  window.addEventListener('appinstalled',function(){
+    $('#installBar').classList.remove('on');
+    toast('ติดตั้งแอปสำเร็จแล้ว 🎉');
+    deferredInstallPrompt=null;
+  });
+
+  // iOS: แนะนำให้ Add to Home Screen ถ้ายังไม่ได้ติดตั้ง
+  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+  var isStandalone=window.navigator.standalone===true||window.matchMedia('(display-mode: standalone)').matches;
+  var shownIOS=sessionStorage.getItem('ios_hint');
+  if(isIOS&&!isStandalone&&!shownIOS){
+    setTimeout(function(){
+      $('#installBar').querySelector('.itxt').innerHTML=
+        '<b>เพิ่มไปที่หน้าจอโฮม</b>กด <b>แชร์</b> (☐↑) แล้วเลือก <b>"เพิ่มไปยังหน้าจอโฮม"</b>';
+      $('#installBtn').style.display='none';
+      $('#installBar').classList.add('on');
+      sessionStorage.setItem('ios_hint','1');
+    },2000);
+  }
+
+  // ปุ่มติดตั้ง (Android)
+  $('#installBtn').onclick=function(){
+    if(deferredInstallPrompt){
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.then(function(r){
+        if(r.outcome==='accepted') $('#installBar').classList.remove('on');
+        deferredInstallPrompt=null;
+      });
+    }
+  };
+  $('#installClose').onclick=function(){$('#installBar').classList.remove('on');};
+}
+
 var toastTimer=null;
 function toast(msg,err){
   var t=$('#toast');t.textContent=msg;t.classList.toggle('err',!!err);t.classList.add('on');
@@ -981,6 +1109,7 @@ function bind(){
     try{map.fitBounds(g.getBounds().pad(.25),{maxZoom:12});}catch(e){}
   }
   fetchFromSheet();
+  setupPWA();
   setTimeout(function(){$('#loader').classList.add('gone');},300);
 })();
 
