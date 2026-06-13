@@ -140,10 +140,9 @@
   .installbox .icard b{font-size:20px;font-weight:700}
   .installbox .icard.paid{background:#e8f6ec;border-color:#bbdfc7;color:var(--clear)}
   .installbox .icard.owe{background:#fdecec;border-color:#f5c6c6;color:var(--owe)}
-  .sourceline{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-  .sourceline button{border:1.5px solid var(--line);background:#fff;border-radius:999px;
-    padding:7px 14px;font:inherit;font-size:14px;cursor:pointer;color:var(--text)}
-  .sourceline button.sel{border-color:#6366f1;background:#eef2ff;color:#4338ca;font-weight:600}
+  .socialfield{position:relative}
+  .socialfield .sico{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none}
+  .socialfield input{padding-left:38px}
   .teamline{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .teamline button{border:1.5px solid var(--line);background:#fff;border-radius:999px;
     padding:7px 14px;font:inherit;font-size:14px;cursor:pointer;color:var(--text)}
@@ -603,13 +602,14 @@ function openForm(rec){
         '<div class="icard paid"><span>จ่ายแล้ว</span><b id="f_ip">0</b><span style="font-size:10px">งวด</span></div>'+
         '<div class="icard owe"><span>ค้างอยู่</span><b id="f_io">0</b><span style="font-size:10px">งวด</span></div>'+
       '</div>'+
-      '<div class="field" style="margin-top:12px"><label>ช่องทางที่มา</label>'+
-        '<div class="sourceline" id="f_sources">'+
-          ['Facebook','Instagram','Line','แนะนำ'].map(function(s){
-            return '<button type="button" data-src="'+esc(s)+'"'+(rec.source===s?' class="sel"':'')+'>'+esc(s)+'</button>';
-          }).join('')+
-        '</div>'+
-        '<input id="f_source" style="margin-top:8px" value="'+esc(rec.source||'')+'" placeholder="หรือพิมพ์เอง เช่น งานออกบูธ"></div>'+
+      '<div class="row" style="margin-top:12px">'+
+        '<div class="field"><label>Facebook</label>'+
+          '<div class="socialfield"><span class="sico">📘</span>'+
+          '<input id="f_fb" value="'+esc(rec.facebook||'')+'" placeholder="ลิงก์หรือชื่อโปรไฟล์"></div></div>'+
+        '<div class="field"><label>Instagram</label>'+
+          '<div class="socialfield"><span class="sico">📸</span>'+
+          '<input id="f_ig" value="'+esc(rec.instagram||'')+'" placeholder="@username"></div></div>'+
+      '</div>'+
       '<div class="field"><label>ทีมที่ดูแล (เว้นได้)</label>'+
         '<div class="teamline" id="f_teams">'+teamBtns+'</div>'+
         '<input id="f_team" style="margin-top:8px" value="'+esc(rec.team||'')+'" placeholder="หรือพิมพ์ชื่อทีมเอง"></div>'+
@@ -621,15 +621,6 @@ function openForm(rec){
     '</form>';
   ['f_total','f_down','f_paid'].forEach(function(id){$('#'+id).addEventListener('input',calcOwe);});
   ['f_installTotal','f_installPaid'].forEach(function(id){$('#'+id).addEventListener('input',calcInstall);});
-  // source buttons
-  $('#f_sources').addEventListener('click',function(e){
-    var b=e.target.closest('button[data-src]');if(!b)return;
-    [].forEach.call(this.children,function(x){x.classList.remove('sel')});
-    b.classList.add('sel');$('#f_source').value=b.dataset.src;
-  });
-  $('#f_source').addEventListener('input',function(){
-    [].forEach.call($('#f_sources').children,function(x){x.classList.toggle('sel',x.dataset.src===this.value)},this);
-  });
   calcInstall();
   $('#f_teams').addEventListener('click',function(e){
     var b=e.target.closest('button[data-team]');if(!b)return;
@@ -673,7 +664,8 @@ async function onSave(rec){
     installTotal:+($('#f_installTotal').value||0)||null,
     installPaid:+($('#f_installPaid').value||0)||null,
     installOwed:(+($('#f_installTotal').value||0)&&+($('#f_installTotal').value||0)-+($('#f_installPaid').value||0))||null,
-    source:$('#f_source').value.trim(),
+    facebook:$('#f_fb').value.trim(),
+    instagram:$('#f_ig').value.trim(),
     team:$('#f_team').value.trim(),area:$('#f_area').value.trim(),
     lat:rec.lat,lng:rec.lng,ts:editingId?(rec.ts||Date.now()):Date.now()
   };
@@ -725,7 +717,8 @@ function openView(id){
             (c.installOwed>0?'<span style="color:var(--owe);font-weight:700">ค้าง '+c.installOwed+' งวด</span>':'<span style="color:var(--clear);font-weight:700">ครบแล้ว</span>')+
           '</span>'+
         '</div>':'')+
-      (c.source?'<div class="vline"><span>ช่องทาง</span><b>'+esc(c.source)+'</b></div>':'')+
+      (c.facebook?'<div class="vline"><span>📘 Facebook</span><a href="'+esc(/^https?:\/\//.test(c.facebook)?c.facebook:'https://facebook.com/'+c.facebook)+'" target="_blank" style="color:var(--accent);font-weight:600;text-decoration:none;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.facebook)+'</a></div>':'')+
+      (c.instagram?'<div class="vline"><span>📸 Instagram</span><a href="'+esc(/^https?:\/\//.test(c.instagram)?c.instagram:'https://instagram.com/'+c.instagram.replace(/^@/,''))+'" target="_blank" style="color:var(--accent);font-weight:600;text-decoration:none">'+esc(c.instagram)+'</a></div>':'')+
     '</div>'+
     '<div class="actions" style="padding-left:22px;padding-right:22px">'+
       '<button class="btn ghost" id="vClose">ปิด</button>'+
